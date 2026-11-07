@@ -71,7 +71,24 @@ jobs:
 
       - name: Build debug APK
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        shell: bash
+        run: |
+          set -o pipefail
+          gradle --no-daemon --console=plain --warning-mode=none :app:assembleDebug 2>&1 | tee "$GITHUB_WORKSPACE/build.log"
+
+      - name: Show compile errors (read this first)
+        if: failure()
+        run: |
+          echo "=== Kotlin/Java errors ==="
+          grep -nE "^e: |error:|What went wrong|Execution failed|Unresolved|FAILED" "$GITHUB_WORKSPACE/build.log" | head -60 || true
+          { echo "### Build errors"; echo '```'; grep -E "^e: |What went wrong|Execution failed" -A2 "$GITHUB_WORKSPACE/build.log" | head -80; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -83,7 +100,7 @@ jobs:
       # Runs after the APK upload so a failing unit test never hides a good APK; a failure here still turns the run red.
       - name: Unit tests
         working-directory: ${{ env.PROJECT_DIR }}
-        run: gradle --no-daemon --stacktrace :app:testDebugUnitTest
+        run: gradle --no-daemon --console=plain --warning-mode=none :app:testDebugUnitTest
 
       - name: Upload test report on failure
         if: failure()
